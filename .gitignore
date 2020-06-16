@@ -126,3 +126,5 @@ dmypy.json
 # PyCharm folder
 .idea/
 
+# vscode folder
+.vscode/
