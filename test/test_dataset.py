@@ -4,20 +4,15 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 import pandas as pd
-from dataset import (
-    dataset_mean_variance,
-    read_dataset,
-    dataset_mean_variance_ingress,
-    dataset_mean_variance_egress,
-    dataset_mean_variance2,
-)
+from dataset import dataset_mean_variance
+
 import matplotlib.pyplot as plt
 
 import numpy as np
 
 
 if __name__ == "__main__":
-    ds = dataset_mean_variance2()
+    ds = dataset_mean_variance(agg_by="sequence", filter="egress", na="drop")
 
     c = {
         "facebook": "blue",
@@ -35,8 +30,8 @@ if __name__ == "__main__":
     plt.figure()
     for u in ds["app"].unique():
         plt.scatter(
-            ds["packets_length_mean_ingress"].where(ds["app"] == u),
-            ds["packets_length_mean_egress"].where(ds["app"] == u),
+            ds["packets_length_mean"].where(ds["app"] == u),
+            ds["packets_length_std"].where(ds["app"] == u),
             c=c[u],
             s=1.0,
             label=u,
