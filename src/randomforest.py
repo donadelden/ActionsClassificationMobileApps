@@ -1,5 +1,4 @@
 from dataset import dataset_mean_variance
-from dataset import dataset_mean_variance2
 from sklearn.model_selection import train_test_split
 from sklearn import ensemble
 from sklearn.model_selection import GridSearchCV
@@ -36,16 +35,7 @@ def gridsearch_model(classifier, parameters):
 
 if __name__ == "__main__":
 
-    # ds = dataset_mean_variance()[["app", "packets_length_mean", "packets_length_std"]]
-    ds = dataset_mean_variance2()[
-        [
-            "app",
-            "packets_length_mean_ingress",
-            "packets_length_std_ingress",
-            "packets_length_mean_egress",
-            "packets_length_std_egress",
-        ]
-    ]
+    ds = dataset_mean_variance(filter="both", na="drop")
     # ds = ds.query('app == "facebook" | app == "twitter"')
 
     ds = ds.dropna()
@@ -63,20 +53,20 @@ if __name__ == "__main__":
     )
 
     # Number of trees in random forest
-    n_estimators = [int(x) for x in np.linspace(start=500, stop=1000, num=5)]
+    n_estimators = [int(x) for x in np.linspace(start=50, stop=1000, num=6)]
     # Number of features to consider at every split
     max_features = ["auto", "sqrt"]
     # Maximum number of levels in tree
-    max_depth = [int(x) for x in np.linspace(60, 100, num=5)]
+    max_depth = [int(x) for x in np.linspace(10, 100, num=6)]
     max_depth.append(None)
     # Minimum number of samples required to split a node
     min_samples_split = [2]
     # Minimum number of samples required at each leaf node
-    min_samples_leaf = [1]
+    min_samples_leaf = [1, 2]
     # Method of selecting samples for training each tree
     bootstrap = [True, False]
     # If bootstrap is True, the number of samples to draw from X to train each base estimator.
-    max_samples = [0.1, 0.5, 1, "None"]  # usefull only if bootstrap = False
+    max_samples = [0.1, 0.5, 1]
 
     parameters = {
         "n_estimators": n_estimators,
@@ -84,8 +74,8 @@ if __name__ == "__main__":
         "min_samples_leaf": min_samples_leaf,
         "min_samples_split": min_samples_split,
         "max_features": max_features,
-        # "bootstrap": bootstrap,
-        # "max_samples": max_samples,
+        "bootstrap": bootstrap,
+        "max_samples": max_samples,
     }
 
     # classifier = gridsearch_model(model_rf(), parameters)
@@ -96,12 +86,16 @@ if __name__ == "__main__":
     # Best parameters with ingress/egress division:
     # 0.8762830534973829
     # {'max_depth': 100, 'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 1000}
+    # Best parameters with ingress/egress division with new dataset pre computations:
+    # 0.9844444444444445
+    # {'max_depth': 64,  'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 50}
+
     classifier = model_rf(
-        max_depth=100,
+        max_depth=64,
         max_features="sqrt",
         min_samples_leaf=1,
         min_samples_split=2,
-        n_estimators=1000,
+        n_estimators=50,
     )
 
     classifier.fit(X_train, y_train)
