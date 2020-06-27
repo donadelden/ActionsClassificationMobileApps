@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 
 data_dir = "data"
 data_file = "apps_total_plus_filtered"
@@ -79,7 +78,7 @@ def dataset_mean_variance(
     na : str, optional
         how to treat NA/NaN values, by default (`None`) NA/NaN are left, `fill` fills with value provided in `na_value`, `drop` drops rows with any NA/NaN
     
-    na : number, optional
+    na_value : number, optional
         only if `na` is `fill`, value the dataset is filled with
     
     Returns
