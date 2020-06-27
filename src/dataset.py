@@ -163,6 +163,7 @@ def dataset_mean_variance(
 def dataset_windowed(
     data_dir=data_dir,
     data_file=data_file,
+    agg_by="sequence",
     N=10000,
     K=100,
     filter=None,
@@ -179,6 +180,9 @@ def dataset_windowed(
     
     data_file : str, optional
         dataset (csv) filename excl. extension
+
+    agg_by : str, optional
+        parameter by which aggregate flows, can be sequence or action
 
     N : int
         the number of output samples
@@ -199,7 +203,13 @@ def dataset_windowed(
     """
     orig = read_dataset(data_dir=data_dir, data_file=data_file)
 
-    aggregated = aggregate_flows_by_sequence(orig)
+    if agg_by == "sequence":
+        aggregated = aggregate_flows_by_sequence(orig)
+    elif agg_by == "action":
+        aggregated = aggregate_flows_by_action(orig)
+    else:
+        raise ValueError(f"cannot aggregate by {agg_by}")
+
     if filter == "ingress":
         aggregated["packets_length_total"] = (
             aggregated["packets_length_total"]
