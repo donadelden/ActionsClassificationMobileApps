@@ -128,3 +128,6 @@ dmypy.json
 
 # vscode folder
 .vscode/
+
+# models
+/models/*
