@@ -35,8 +35,11 @@ def gridsearch_model(classifier, parameters):
 
 if __name__ == "__main__":
 
-    ds = dataset_mean_variance(filter="both", na="drop")
+    ds = dataset_mean_variance(filter="both", na="drop", agg_by="action")
     # ds = ds.query('app == "facebook" | app == "twitter"')
+
+    if "action" in ds:
+        ds = ds.drop("action", axis=1)
 
     ds = ds.dropna()
 
@@ -48,21 +51,21 @@ if __name__ == "__main__":
         ds.drop("app", axis=1),
         ds["app"],
         test_size=0.2,
-        train_size=0.2,
+        # train_size=0.2,
         random_state=1234,
     )
 
     # Number of trees in random forest
-    n_estimators = [int(x) for x in np.linspace(start=50, stop=1000, num=6)]
+    n_estimators = [int(x) for x in np.linspace(start=1000, stop=3000, num=5)]
     # Number of features to consider at every split
-    max_features = ["auto", "sqrt"]
+    max_features = ["sqrt"]
     # Maximum number of levels in tree
-    max_depth = [int(x) for x in np.linspace(10, 100, num=6)]
+    max_depth = [int(x) for x in np.linspace(10, 200, num=1)]
     max_depth.append(None)
     # Minimum number of samples required to split a node
     min_samples_split = [2]
     # Minimum number of samples required at each leaf node
-    min_samples_leaf = [1, 2]
+    min_samples_leaf = [1]
     # Method of selecting samples for training each tree
     bootstrap = [True, False]
     # If bootstrap is True, the number of samples to draw from X to train each base estimator.
@@ -73,9 +76,9 @@ if __name__ == "__main__":
         "max_depth": max_depth,
         "min_samples_leaf": min_samples_leaf,
         "min_samples_split": min_samples_split,
-        "max_features": max_features,
-        "bootstrap": bootstrap,
-        "max_samples": max_samples,
+        "max_features": [None],
+        # "bootstrap": bootstrap,
+        # "max_samples": max_samples,
     }
 
     # classifier = gridsearch_model(model_rf(), parameters)
@@ -89,13 +92,16 @@ if __name__ == "__main__":
     # Best parameters with ingress/egress division with new dataset pre computations:
     # 0.9844444444444445
     # {'max_depth': 64,  'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 50}
+    # Best parameters aggregating by actions
+    # 0.8855958126571953
+    # {'max_depth': None, 'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 1500}
 
     classifier = model_rf(
-        max_depth=64,
+        max_depth=None,
         max_features="sqrt",
         min_samples_leaf=1,
         min_samples_split=2,
-        n_estimators=50,
+        n_estimators=1500,
     )
 
     classifier.fit(X_train, y_train)
