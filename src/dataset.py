@@ -96,7 +96,7 @@ def dataset_mean_variance(
         raise ValueError(f"Can only aggregate by action or sequence, not {agg_by}")
 
     app = ds["app"]
-    # action = ds["action"]
+    action = ds["action"]
     # sequence = ds["sequence"]
 
     if filter == "both":
@@ -156,6 +156,9 @@ def dataset_mean_variance(
         ds.dropna(inplace=True)
     elif na != None:
         raise ValueError(f"cannot use {na} method to treat NA/NaN")
+
+    if agg_by == "action":
+        ds = pd.concat([ds, action], axis=1)
 
     return ds
 
