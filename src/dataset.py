@@ -160,7 +160,7 @@ def dataset_mean_variance(
     return ds
 
 
-def dataset_windowed(
+def dataset_windowed_random(
     data_dir=data_dir,
     data_file=data_file,
     agg_by="sequence",
@@ -171,7 +171,7 @@ def dataset_windowed(
 ):
     """ Generate dataset of N arrays with K subsequent packet lengths.
 
-    The original dataset is aggregated by sequence, then randomly sampled with replacement, and cropped randomly to match the desired length.
+    The original dataset is aggregated by sequence or action, then randomly sampled with replacement, and cropped randomly to match the desired length.
 
     Parameters
     ----------
@@ -251,3 +251,80 @@ def dataset_windowed(
         sampled = sampled.append(temp)
 
     return sampled.reset_index(drop=True)
+
+
+def dataset_windowed(
+    data_dir=data_dir, data_file=data_file, K=100, stride=0.2, filter=None,
+):
+    """ Generate dataset of arrays with K subsequent packet lengths using a sliding window approach.
+
+    The original dataset is aggregated by sequence and cropped with a sliding window with desired size and stride.
+
+
+    Parameters
+    ----------
+    data_dir : str, optional
+        relative directory path (from project root) to dataset location
+    
+    data_file : str, optional
+        dataset (csv) filename excl. extension
+
+    K : int
+        the size of each sample, number of subsequent packet lengths
+
+    stride : float or int or None, optional
+        the stride between windows, if `stride < 1` then `int(K*stride)` is used, if `stride == None` then `stride = K`
+
+    filter : str, optional
+        filter by `"ingress"`, `"egress"` or `None` (default)
+
+    Returns
+    -------
+    ds
+        the dataset
+    """
+    if stride <= 0:
+        raise ValueError(f"stride must be positive, got {stride}")
+    elif stride < 1:
+        stride = int(K * stride)
+    elif stride == None:
+        stride = K
+
+    orig = read_dataset(data_dir=data_dir, data_file=data_file)
+    aggregated = aggregate_flows_by_sequence(orig)
+
+    if filter == "ingress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: l[l > 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter == "egress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: -l[l < 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter != None:
+        raise ValueError(f"cannot filter by {filter}")
+
+    aggregated = aggregated.mask(
+        lambda l: l["packets_length_total"].map(len) < K
+    ).dropna()
+
+    aggregated["packets_length_total"] = aggregated["packets_length_total"].map(
+        lambda l: sliding_window(l, K, stride)
+    )
+    return aggregated.explode("packets_length_total").reset_index(drop=True)
+
+
+def sliding_window(packets_length, K, stride):
+    return [
+        packets_length[i : i + K] for i in range(0, len(packets_length) - K + 1, stride)
+    ]
