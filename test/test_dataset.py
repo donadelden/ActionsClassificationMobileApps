@@ -4,7 +4,12 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 import pandas as pd
-from dataset import dataset_mean_variance, dataset_windowed, read_dataset
+from dataset import (
+    dataset_mean_variance,
+    dataset_windowed,
+    dataset_windowed_random,
+    read_dataset,
+)
 
 import matplotlib.pyplot as plt
 
@@ -55,8 +60,8 @@ if __name__ == "__main__":
         else:
             print(ds)
 
-    elif args.dataset_type == "windowed":
-        ds = dataset_windowed(N=5, K=100, filter=args.filter)
+    elif args.dataset_type == "windowed_random":
+        ds = dataset_windowed_random(N=5, K=100, filter=args.filter)
         print(ds)
         plt.figure()
         for _, row in ds.iterrows():
@@ -64,3 +69,8 @@ if __name__ == "__main__":
 
         plt.legend()
         plt.show()
+
+    elif args.dataset_type == "windowed":
+        ds = dataset_windowed(K=150, stride=10, filter=args.filter)
+        print(ds)
+        print(ds["app"].value_counts())
