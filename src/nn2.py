@@ -35,7 +35,7 @@ class FFNN(tf.keras.Model):
 if __name__ == "__main__":
     tf.keras.backend.set_floatx("float64")
     # load and split the dataset
-    ds = dataset_windowed(N=100000, K=300)
+    ds = dataset_windowed(K=200, stride=10)
     ingress = (
         ds["packets_length_total"]
         .map(np.array)
