@@ -71,6 +71,17 @@ if __name__ == "__main__":
         plt.show()
 
     elif args.dataset_type == "windowed":
-        ds = dataset_windowed(K=150, stride=10, filter=args.filter)
+        ds = dataset_windowed(K=10, stride=None, filter=args.filter)
         print(ds)
         print(ds["app"].value_counts())
+
+        plt.figure()
+        labels = tuple()
+        for app, group in (
+            ds.explode("packets_length_total").sample(100000).groupby("app")
+        ):
+            group.plot.kde(ax=plt.gca())
+            labels += (app,)
+        plt.legend(labels)
+        plt.xlim(xmin=-2000, xmax=2000)
+        plt.show()

@@ -286,12 +286,12 @@ def dataset_windowed(
     ds
         the dataset
     """
-    if stride <= 0:
+    if stride == None:
+        stride = K
+    elif stride <= 0:
         raise ValueError(f"stride must be positive, got {stride}")
     elif stride < 1:
         stride = int(K * stride)
-    elif stride == None:
-        stride = K
 
     orig = read_dataset(data_dir=data_dir, data_file=data_file)
     aggregated = aggregate_flows_by_sequence(orig)
