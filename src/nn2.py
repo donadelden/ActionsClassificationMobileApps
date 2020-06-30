@@ -11,15 +11,21 @@ class FFNN(tf.keras.Model):
         super(FFNN, self).__init__()
         self.weight_regularizer = tf.keras.regularizers.l2(1e-3)
 
-        self.conv1 = tf.keras.layers.Conv1D(filters=64, kernel_size=3, activation=tf.nn.relu)
+        self.conv1 = tf.keras.layers.Conv1D(
+            filters=64, kernel_size=3, activation=tf.nn.relu
+        )
         self.batchnorm1 = tf.keras.layers.BatchNormalization(momentum=0.999)
         self.flatten1 = tf.keras.layers.Flatten()
 
-        self.conv2 = tf.keras.layers.Conv1D(filters=64, kernel_size=3, activation=tf.nn.relu)
+        self.conv2 = tf.keras.layers.Conv1D(
+            filters=64, kernel_size=3, activation=tf.nn.relu
+        )
         self.batchnorm2 = tf.keras.layers.BatchNormalization(momentum=0.999)
         self.flatten2 = tf.keras.layers.Flatten()
 
-        self.hidden2 = tf.keras.layers.Dense(15, activation=tf.nn.sigmoid, kernel_regularizer=self.weight_regularizer)
+        self.hidden2 = tf.keras.layers.Dense(
+            15, activation=tf.nn.sigmoid, kernel_regularizer=self.weight_regularizer
+        )
         self.dropout2 = tf.keras.layers.Dropout(0.1)
 
         self.last = tf.keras.layers.Dense(output_dim, activation=tf.nn.softmax)
