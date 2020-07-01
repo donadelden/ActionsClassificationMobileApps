@@ -128,3 +128,8 @@ dmypy.json
 
 # vscode folder
 .vscode/
+
+# models
+models/*
+!models/cnn
+
