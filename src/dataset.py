@@ -13,42 +13,10 @@ def read_dataset(data_dir=data_dir, data_file=data_file):
     pkt_len = ds["packets_length_total"].map(
         lambda l: tuple(np.fromstring(l[1:-1], sep=", ", dtype=np.float))
     )
-    ds["packets_length_total"] = pkt_len
-    return ds
-
-
-def aggregate_flows_by_action(ds):
-    ds = (
-        ds[["app", "action", "sequence", "action_start", "packets_length_total"]]
-        # group together flows related to the same instance of action
-        .groupby(
-            ["app", "action", "sequence", "action_start"], sort=False, as_index=False
-        )
-        # and aggregate packet sequences
-        .agg(
-            {
-                "packets_length_total": lambda group: tuple(
-                    np.concatenate(group.tolist())
-                )
-            }
-        ).reset_index(drop=True)
-    )
-    return ds
-
-
-def aggregate_flows_by_sequence(ds):
-    ds = (
-        ds[["app", "sequence", "packets_length_total"]]
-        .groupby(["app", "sequence"], sort=False, as_index=False)
-        .agg(
-            {
-                "packets_length_total": lambda group: tuple(
-                    np.concatenate(group.tolist())
-                )
-            }
-        )
-        .set_index("sequence")
-    )
+    ds["packet_length"] = pkt_len
+    ds["app"] = ds["app"].astype("category")
+    ds["action"] = ds["action"].astype("category")
+    ds = ds.drop(columns="packets_length_total").explode("packet_length").reset_index()
     return ds
 
 
@@ -89,9 +57,13 @@ def dataset_mean_variance(
     ds = read_dataset(data_dir=data_dir, data_file=data_file)
 
     if agg_by == "sequence":
-        ds = aggregate_flows_by_sequence(ds)
+        grouped = ds[["app", "sequence", "packet_length"]].groupby(["app", "sequence"])
     elif agg_by == "action":
-        ds = aggregate_flows_by_action(ds)
+        grouped = (
+            ds[["app", "action", "sequence", "action_start", "packet_length"]]
+            # group together flows related to the same instance of action
+            .groupby(["app", "action", "sequence", "action_start"])
+        )
     else:
         raise ValueError(f"Can only aggregate by action or sequence, not {agg_by}")
 
@@ -99,56 +71,32 @@ def dataset_mean_variance(
     action = ds["action"]
     # sequence = ds["sequence"]
 
-    if filter == "both":
-        filtered_ingress = (
-            ds["packets_length_total"]
-            .map(np.array)
-            .map(lambda l: l[l > 0])
-            .where(lambda s: s.map(lambda l: l.size) > 0)
-            .dropna()
+    if filter is None:
+        ds = grouped["packet_length"].agg(
+            packets_length_mean=lambda l: np.mean(np.abs(l)),
+            packets_length_std=lambda l: np.std(np.abs(l)),
         )
-        filtered_egress = (
-            ds["packets_length_total"]
-            .map(np.array)
-            .map(lambda l: -l[l < 0])
-            .where(lambda s: s.map(lambda l: l.size) > 0)
-            .dropna()
+    elif filter == "ingress":
+        ds = grouped["packet_length"].agg(
+            packets_length_mean=lambda l: np.mean(-l[l < 0]),
+            packets_length_std=lambda l: np.std(-l[l < 0]),
         )
-        mean_ingress = filtered_ingress.map(np.mean).rename("packets_length_mean")
-        variance_ingress = filtered_ingress.map(np.std).rename("packets_length_std")
-        mean_egress = filtered_egress.map(np.mean).rename("packets_length_mean")
-        variance_egress = filtered_egress.map(np.std).rename("packets_length_std")
-
-        ds = pd.concat(
-            [app, mean_ingress, variance_ingress, mean_egress, variance_egress], axis=1
+    elif filter == "egress":
+        ds = grouped["packet_length"].agg(
+            packets_length_mean=lambda l: np.mean(l[l > 0]),
+            packets_length_std=lambda l: np.std(l[l > 0]),
         )
-
+    elif filter == "both":
+        ds = grouped["packet_length"].agg(
+            ingress_packets_length_mean=lambda l: np.mean(-l[l < 0]),
+            ingress_packets_length_std=lambda l: np.std(-l[l < 0]),
+            egress_packets_length_mean=lambda l: np.mean(l[l > 0]),
+            egress_packets_length_std=lambda l: np.std(l[l > 0]),
+        )
     else:
-        if filter == None:
-            filtered = ds["packets_length_total"].map(np.abs)
-        elif filter == "ingress":
-            filtered = (
-                ds["packets_length_total"]
-                .map(np.array)
-                .map(lambda l: l[l > 0])
-                .where(lambda s: s.map(lambda l: l.size) > 0)
-                .dropna()
-            )
-        elif filter == "egress":
-            filtered = (
-                ds["packets_length_total"]
-                .map(np.array)
-                .map(lambda l: -l[l < 0])
-                .where(lambda s: s.map(lambda l: l.size) > 0)
-                .dropna()
-            )
-        else:
-            raise ValueError(f"Cannot filter by {filter}")
+        raise ValueError(f"Cannot filter by {filter}")
 
-        mean = filtered.map(np.mean).rename("packets_length_mean")
-        variance = filtered.map(np.std).rename("packets_length_std")
-
-        ds = pd.concat([app, mean, variance], axis=1)
+    ds = ds.reset_index()
 
     if na == "fill":
         ds.fillna(value=na_value, inplace=True)
@@ -158,7 +106,9 @@ def dataset_mean_variance(
         raise ValueError(f"cannot use {na} method to treat NA/NaN")
 
     if agg_by == "action":
-        ds = pd.concat([ds, action], axis=1)
+        ds = ds.reset_index().drop(columns="action_start")
+
+    ds.drop(columns="sequence")
 
     return ds
 
@@ -256,7 +206,7 @@ def dataset_windowed_random(
     return sampled.reset_index(drop=True)
 
 
-def dataset_windowed(
+def dataset_windowed_mean_variance(
     data_dir=data_dir, data_file=data_file, K=100, stride=0.2, filter=None,
 ):
     """ Generate dataset of arrays with K subsequent packet lengths using a sliding window approach.
@@ -286,45 +236,36 @@ def dataset_windowed(
     ds
         the dataset
     """
-    if stride == None:
+    if stride is None:
         stride = K
     elif stride <= 0:
         raise ValueError(f"stride must be positive, got {stride}")
     elif stride < 1:
         stride = int(K * stride)
 
-    orig = read_dataset(data_dir=data_dir, data_file=data_file)
-    aggregated = aggregate_flows_by_sequence(orig)
+    ds = read_dataset(data_dir=data_dir, data_file=data_file)
 
-    if filter == "ingress":
-        aggregated["packets_length_total"] = (
-            aggregated["packets_length_total"]
-            .map(np.array)
-            .map(lambda l: l[l > 0])
-            .where(lambda s: s.map(lambda l: l.size) > 0)
-            .dropna()
-            .map(tuple)
-        )
+    if filter is None:
+        ds["packet_length"] = ds["packet_length"].abs()
+    elif filter == "ingress":
+        ds = ds.query("packet_length < 0")
+        ds["packet_length"] = -ds["packet_length"]
     elif filter == "egress":
-        aggregated["packets_length_total"] = (
-            aggregated["packets_length_total"]
-            .map(np.array)
-            .map(lambda l: -l[l < 0])
-            .where(lambda s: s.map(lambda l: l.size) > 0)
-            .dropna()
-            .map(tuple)
-        )
-    elif filter != None:
-        raise ValueError(f"cannot filter by {filter}")
+        ds = ds.query("packet_length > 0")
+    else:
+        raise ValueError(f"Cannot filter by {filter}")
 
-    aggregated = aggregated.mask(
-        lambda l: l["packets_length_total"].map(len) < K
-    ).dropna()
+    rolling = ds.groupby(["app", "sequence"])["packet_length"].rolling(window=K)
 
-    aggregated["packets_length_total"] = aggregated["packets_length_total"].map(
-        lambda l: sliding_window(l, K, stride)
+    ds = (
+        ds.groupby(["app", "sequence"])["packet_length"]
+        .rolling(window=K, min_periods=int(K / 2))
+        .agg(dict(packets_length_mean="mean", packets_length_std="std",))
+        .dropna()
+        .iloc[::stride]
     )
-    return aggregated.explode("packets_length_total").reset_index(drop=True)
+    ds = ds.reset_index()
+    return ds
 
 
 def sliding_window(packets_length, K, stride):

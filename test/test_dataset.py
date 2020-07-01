@@ -6,7 +6,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 import pandas as pd
 from dataset import (
     dataset_mean_variance,
-    dataset_windowed,
+    dataset_windowed_mean_variance,
+    # dataset_windowed,
     dataset_windowed_random,
     read_dataset,
 )
@@ -25,7 +26,8 @@ if __name__ == "__main__":
     args = p.parse_args()
 
     if args.dataset_type == "mean_variance":
-        ds = dataset_mean_variance(agg_by="sequence", filter=args.filter, na="drop")
+        # ds = dataset_mean_variance(agg_by="sequence", filter=args.filter, na="drop")
+        ds = dataset_windowed_mean_variance(filter=args.filter)
 
         if args.filter != "both":
 
@@ -43,17 +45,18 @@ if __name__ == "__main__":
             # ds = ds.query('sequence == 1')
 
             plt.figure()
-            for u in ds["app"].unique():
-                plt.scatter(
-                    ds["packets_length_mean"].where(ds["app"] == u),
-                    ds["packets_length_std"].where(ds["app"] == u),
-                    c=c[u],
-                    s=1.0,
-                    label=u,
-                    alpha=0.3,
+            labels = tuple()
+            for app, group in ds.groupby("app"):
+                group.plot.scatter(
+                    x="packets_length_mean",
+                    y="packets_length_std",
+                    c=c[app],
+                    s=2,
+                    ax=plt.gca(),
                 )
+                labels += (app,)
 
-            plt.legend()
+            plt.legend(labels)
             plt.xlabel("mean pkt lenght")
             plt.ylabel("variance")
             plt.show()
