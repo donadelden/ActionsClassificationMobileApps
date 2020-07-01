@@ -92,11 +92,12 @@ def dataset_mean_variance(
         ds = aggregate_flows_by_sequence(ds)
     elif agg_by == "action":
         ds = aggregate_flows_by_action(ds)
+        action = ds["action"]
+
     else:
         raise ValueError(f"Can only aggregate by action or sequence, not {agg_by}")
 
     app = ds["app"]
-    action = ds["action"]
     # sequence = ds["sequence"]
 
     if filter == "both":
@@ -114,10 +115,16 @@ def dataset_mean_variance(
             .where(lambda s: s.map(lambda l: l.size) > 0)
             .dropna()
         )
-        mean_ingress = filtered_ingress.map(np.mean).rename("packets_length_mean")
-        variance_ingress = filtered_ingress.map(np.std).rename("packets_length_std")
-        mean_egress = filtered_egress.map(np.mean).rename("packets_length_mean")
-        variance_egress = filtered_egress.map(np.std).rename("packets_length_std")
+        mean_ingress = filtered_ingress.map(np.mean).rename(
+            "ingress_packets_length_mean"
+        )
+        variance_ingress = filtered_ingress.map(np.std).rename(
+            "ingress_packets_length_std"
+        )
+        mean_egress = filtered_egress.map(np.mean).rename("egress_packets_length_mean")
+        variance_egress = filtered_egress.map(np.std).rename(
+            "egress_packets_length_std"
+        )
 
         ds = pd.concat(
             [app, mean_ingress, variance_ingress, mean_egress, variance_egress], axis=1

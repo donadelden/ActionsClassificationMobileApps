@@ -15,6 +15,16 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+c = {
+    "facebook": "blue",
+    "twitter": "cyan",
+    "gmail": "red",
+    "gplus": "magenta",
+    "tumblr": "purple",
+    "dropbox": "yellow",
+    "evernote": "green",
+}
+
 
 if __name__ == "__main__":
     import argparse
@@ -29,33 +39,25 @@ if __name__ == "__main__":
 
         if args.filter != "both":
 
-            c = {
-                "facebook": "blue",
-                "twitter": "cyan",
-                "gmail": "red",
-                "gplus": "magenta",
-                "tumblr": "purple",
-                "dropbox": "yellow",
-                "evernote": "green",
-            }
-
             # ds = ds.query('app == "facebook" | app == "twitter"')
             # ds = ds.query('sequence == 1')
 
             plt.figure()
-            for u in ds["app"].unique():
-                plt.scatter(
-                    ds["packets_length_mean"].where(ds["app"] == u),
-                    ds["packets_length_std"].where(ds["app"] == u),
-                    c=c[u],
-                    s=1.0,
-                    label=u,
+            labels = tuple()
+            for app, group in ds.groupby("app"):
+                group.plot.scatter(
+                    x="packets_length_mean",
+                    y="packets_length_std",
+                    c=c[app],
+                    s=2,
                     alpha=0.3,
+                    ax=plt.gca(),
                 )
+                labels += (app,)
 
-            plt.legend()
+            plt.legend(labels, loc="upper left")
             plt.xlabel("mean pkt lenght")
-            plt.ylabel("variance")
+            plt.ylabel("std")
             plt.show()
         else:
             print(ds)
@@ -84,4 +86,54 @@ if __name__ == "__main__":
             labels += (app,)
         plt.legend(labels)
         plt.xlim(xmin=-2000, xmax=2000)
+
+        # mean-variance on windowed
+        ds = dataset_windowed(K=150, stride=30, filter=None)
+
+        app = ds["app"]
+        filtered_ingress = (
+            ds["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: l[l > 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+        )
+        filtered_egress = (
+            ds["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: -l[l < 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+        )
+        mean_ingress = filtered_ingress.map(np.mean).rename(
+            "ingress_packets_length_mean"
+        )
+        variance_ingress = filtered_ingress.map(np.std).rename(
+            "ingress_packets_length_std"
+        )
+        mean_egress = filtered_egress.map(np.mean).rename("egress_packets_length_mean")
+        variance_egress = filtered_egress.map(np.std).rename(
+            "egress_packets_length_std"
+        )
+
+        ds = pd.concat(
+            [app, mean_ingress, variance_ingress, mean_egress, variance_egress], axis=1
+        )
+
+        plt.figure()
+        labels = tuple()
+        filter = args.filter if args.filter is not None else "egress"
+        for app, group in ds.groupby("app"):
+            group.plot.scatter(
+                x=f"{filter}_packets_length_mean",
+                y=f"{filter}_packets_length_std",
+                c=c[app],
+                s=2,
+                alpha=0.3,
+                ax=plt.gca(),
+            )
+            labels += (app,)
+        plt.legend(labels)
+        plt.xlabel("mean pkt lenght")
+        plt.ylabel("std")
         plt.show()
