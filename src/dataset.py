@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 
 data_dir = "data"
 data_file = "apps_total_plus_filtered"
@@ -79,7 +78,7 @@ def dataset_mean_variance(
     na : str, optional
         how to treat NA/NaN values, by default (`None`) NA/NaN are left, `fill` fills with value provided in `na_value`, `drop` drops rows with any NA/NaN
     
-    na : number, optional
+    na_value : number, optional
         only if `na` is `fill`, value the dataset is filled with
     
     Returns
@@ -93,11 +92,12 @@ def dataset_mean_variance(
         ds = aggregate_flows_by_sequence(ds)
     elif agg_by == "action":
         ds = aggregate_flows_by_action(ds)
+        action = ds["action"]
+
     else:
         raise ValueError(f"Can only aggregate by action or sequence, not {agg_by}")
 
     app = ds["app"]
-    # action = ds["action"]
     # sequence = ds["sequence"]
 
     if filter == "both":
@@ -106,17 +106,25 @@ def dataset_mean_variance(
             .map(np.array)
             .map(lambda l: l[l > 0])
             .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
         )
         filtered_egress = (
             ds["packets_length_total"]
             .map(np.array)
             .map(lambda l: -l[l < 0])
             .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
         )
-        mean_ingress = filtered_ingress.map(np.mean).rename("packets_length_mean")
-        variance_ingress = filtered_ingress.map(np.std).rename("packets_length_std")
-        mean_egress = filtered_egress.map(np.mean).rename("packets_length_mean")
-        variance_egress = filtered_egress.map(np.std).rename("packets_length_std")
+        mean_ingress = filtered_ingress.map(np.mean).rename(
+            "ingress_packets_length_mean"
+        )
+        variance_ingress = filtered_ingress.map(np.std).rename(
+            "ingress_packets_length_std"
+        )
+        mean_egress = filtered_egress.map(np.mean).rename("egress_packets_length_mean")
+        variance_egress = filtered_egress.map(np.std).rename(
+            "egress_packets_length_std"
+        )
 
         ds = pd.concat(
             [app, mean_ingress, variance_ingress, mean_egress, variance_egress], axis=1
@@ -131,6 +139,7 @@ def dataset_mean_variance(
                 .map(np.array)
                 .map(lambda l: l[l > 0])
                 .where(lambda s: s.map(lambda l: l.size) > 0)
+                .dropna()
             )
         elif filter == "egress":
             filtered = (
@@ -138,6 +147,7 @@ def dataset_mean_variance(
                 .map(np.array)
                 .map(lambda l: -l[l < 0])
                 .where(lambda s: s.map(lambda l: l.size) > 0)
+                .dropna()
             )
         else:
             raise ValueError(f"Cannot filter by {filter}")
@@ -154,4 +164,177 @@ def dataset_mean_variance(
     elif na != None:
         raise ValueError(f"cannot use {na} method to treat NA/NaN")
 
+    if agg_by == "action":
+        ds = pd.concat([ds, action], axis=1)
+
     return ds
+
+
+def dataset_windowed_random(
+    data_dir=data_dir,
+    data_file=data_file,
+    agg_by="sequence",
+    N=10000,
+    K=100,
+    filter=None,
+    random_state=None,
+):
+    """ Generate dataset of N arrays with K subsequent packet lengths.
+
+    The original dataset is aggregated by sequence or action, then randomly sampled with replacement, and cropped randomly to match the desired length.
+
+    Parameters
+    ----------
+    data_dir : str, optional
+        relative directory path (from project root) to dataset location
+    
+    data_file : str, optional
+        dataset (csv) filename excl. extension
+
+    agg_by : str, optional
+        parameter by which aggregate flows, can be sequence or action
+
+    N : int
+        the number of output samples
+
+    K : int
+        the size of each sample, number of subsequent packet lengths
+
+    filter : str, optional
+        filter by `"ingress"`, `"egress"` or `None` (default)
+
+    random_state : int
+        initial seed for the RNG
+
+    Returns
+    -------
+    ds
+        the dataset
+    """
+    orig = read_dataset(data_dir=data_dir, data_file=data_file)
+
+    if agg_by == "sequence":
+        aggregated = aggregate_flows_by_sequence(orig)
+    elif agg_by == "action":
+        aggregated = aggregate_flows_by_action(orig)
+    else:
+        raise ValueError(f"cannot aggregate by {agg_by}")
+
+    if filter == "ingress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: l[l > 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter == "egress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: -l[l < 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter != None:
+        raise ValueError(f"cannot filter by {filter}")
+
+    aggregated = aggregated.mask(
+        lambda l: l["packets_length_total"].map(len) < K + 1
+    ).dropna()
+
+    # work in chunks for memory performance
+    sampled = pd.DataFrame(data=None, columns=aggregated.columns)
+    np.random.seed(random_state)
+    for _ in range(int(np.ceil(N / 100))):
+        n = min((N - sampled.shape[0], 100))
+        temp = aggregated.sample(n=n, replace=True)
+
+        temp["packets_length_total"] = (
+            temp["packets_length_total"]
+            .map(lambda l: l[np.random.randint(len(l) - K) :])
+            .map(lambda l: l[:K])
+            .map(np.array)
+        )
+        sampled = sampled.append(temp)
+
+    return sampled.reset_index(drop=True)
+
+
+def dataset_windowed(
+    data_dir=data_dir, data_file=data_file, K=100, stride=0.2, filter=None,
+):
+    """ Generate dataset of arrays with K subsequent packet lengths using a sliding window approach.
+
+    The original dataset is aggregated by sequence and cropped with a sliding window with desired size and stride.
+
+
+    Parameters
+    ----------
+    data_dir : str, optional
+        relative directory path (from project root) to dataset location
+    
+    data_file : str, optional
+        dataset (csv) filename excl. extension
+
+    K : int
+        the size of each sample, number of subsequent packet lengths
+
+    stride : float or int or None, optional
+        the stride between windows, if `stride < 1` then `int(K*stride)` is used, if `stride == None` then `stride = K`
+
+    filter : str, optional
+        filter by `"ingress"`, `"egress"` or `None` (default)
+
+    Returns
+    -------
+    ds
+        the dataset
+    """
+    if stride == None:
+        stride = K
+    elif stride <= 0:
+        raise ValueError(f"stride must be positive, got {stride}")
+    elif stride < 1:
+        stride = int(K * stride)
+
+    orig = read_dataset(data_dir=data_dir, data_file=data_file)
+    aggregated = aggregate_flows_by_sequence(orig)
+
+    if filter == "ingress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: l[l > 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter == "egress":
+        aggregated["packets_length_total"] = (
+            aggregated["packets_length_total"]
+            .map(np.array)
+            .map(lambda l: -l[l < 0])
+            .where(lambda s: s.map(lambda l: l.size) > 0)
+            .dropna()
+            .map(tuple)
+        )
+    elif filter != None:
+        raise ValueError(f"cannot filter by {filter}")
+
+    aggregated = aggregated.mask(
+        lambda l: l["packets_length_total"].map(len) < K
+    ).dropna()
+
+    aggregated["packets_length_total"] = aggregated["packets_length_total"].map(
+        lambda l: sliding_window(l, K, stride)
+    )
+    return aggregated.explode("packets_length_total").reset_index(drop=True)
+
+
+def sliding_window(packets_length, K, stride):
+    return [
+        packets_length[i : i + K] for i in range(0, len(packets_length) - K + 1, stride)
+    ]
