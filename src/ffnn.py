@@ -34,8 +34,15 @@ class FFNN(tf.keras.Model):
 
 if __name__ == "__main__":
     tf.keras.backend.set_floatx("float64")
-    # load and split the dataset
-    ds = dataset_windowed(K=200, stride=10)
+
+    # ######## PARAMETERS for the dataset load process
+    k = 200
+    stride = 10
+
+    # load the dataset
+    ds = dataset_windowed(K=k, stride=stride)
+
+    # precomputations
     ingress = (
         ds["packets_length_total"]
         .map(np.array)
@@ -56,6 +63,7 @@ if __name__ == "__main__":
     ds["packets_length_std_egress"] = egress.map(np.std)
     ds = ds.drop(columns=["packets_length_total"]).dropna()
 
+    # split of the dataset
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
         ds["app"].astype("category"),
