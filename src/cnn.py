@@ -1,14 +1,13 @@
 import os
-
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-import numpy as np
 import plots
 from dataset import dataset_windowed
 
 
 def MyModel(input_shape, output_dim):
+
     X_input = tf.keras.Input(input_shape)
 
     # CONV -> MaxPool -> Batch Normalization
@@ -34,7 +33,7 @@ def MyModel(input_shape, output_dim):
         name="fc",
     )(X)
 
-    # Create the keras model.
+    # Create the keras model
     model = tf.keras.Model(inputs=X_input, outputs=X, name="CNNModel")
 
     return model
@@ -53,7 +52,6 @@ if __name__ == "__main__":
 
     # load and split the dataset
     ds = dataset_windowed(K=k, stride=stride)
-    # ds = ds.query("app != \"gmail\"")
 
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
@@ -103,6 +101,7 @@ if __name__ == "__main__":
         X_train_reshaped = pd.DataFrame(X_train["packets_length_total"].to_list())
         X_train_reshaped = X_train_reshaped.to_numpy().reshape((-1, k, 1))
 
+        # training
         history = model.fit(
             x=X_train_reshaped,
             y=y_train_dumm,
@@ -111,9 +110,13 @@ if __name__ == "__main__":
             validation_split=0.25,
             callbacks=[early_stopping],
         )
+
         plots.train_val_history(history.history)
+
+        # save the model for future use
         model.save(MODEL_DIRECTORY + "/model.h5")
     else:
+        # load the model
         model = tf.keras.models.load_model(MODEL_DIRECTORY + "/model.h5")
         print("Model loaded successfully.")
 
@@ -127,6 +130,7 @@ if __name__ == "__main__":
     print(f"Test loss: {loss}")
     print(f"Test accuracy: {acc}")
 
+    # prediction for the confusion matrix
     y_pred_dumm = pd.DataFrame(
         model.predict(X_test_reshaped, batch_size=100), columns=y_test_dumm.columns,
     )
