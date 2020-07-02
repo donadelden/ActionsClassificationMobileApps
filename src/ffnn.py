@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import plots
 from dataset import dataset_windowed
+from sklearn.metrics import precision_recall_fscore_support
 
 
 class FFNN(tf.keras.Model):
@@ -11,7 +12,7 @@ class FFNN(tf.keras.Model):
         super(FFNN, self).__init__()
         self.weight_regularizer = tf.keras.regularizers.l2(1e-3)
         self.hidden1 = tf.keras.layers.Dense(
-            10, activation=tf.nn.elu, kernel_regularizer=self.weight_regularizer
+            20, activation=tf.nn.elu, kernel_regularizer=self.weight_regularizer
         )
         self.hidden2 = tf.keras.layers.Dense(
             15, activation=tf.nn.sigmoid, kernel_regularizer=self.weight_regularizer
@@ -125,6 +126,29 @@ if __name__ == "__main__":
         model.predict(X_test, batch_size=100), columns=y_test_dumm.columns,
     )
     y_pred = y_pred_dumm.idxmax(axis="columns").astype("category")
+
+    precision, recall, fscore, support = precision_recall_fscore_support(y_test, y_pred)
+
+    val = (
+        y_test.value_counts()
+        .rename("support")
+        .to_frame()
+        .reset_index()
+        .merge(
+            pd.DataFrame(
+                {
+                    "precision": precision,
+                    "recall": recall,
+                    "fscore": fscore,
+                    "support": support,
+                }
+            ),
+            on="support",
+        )
+        .set_index("index")
+    )
+
+    print(val)
 
     plots.confusion_matrix_tf(y_test, y_pred)
     plots.show()
