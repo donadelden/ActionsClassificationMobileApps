@@ -1,4 +1,4 @@
-from dataset import dataset_mean_variance
+import time
 from dataset import dataset_windowed
 from sklearn.model_selection import train_test_split
 from sklearn import ensemble
@@ -36,17 +36,13 @@ def gridsearch_model(classifier, parameters):
 
 if __name__ == "__main__":
 
-    # #### GRID SEARCH or NOT?
+    # #### decide if Grid Search is needed (slow)
     grid = False
-
     # #### DATASET PARAMETERS
     k = 200
     stride = 10
-
-    # ds = dataset_mean_variance(filter="both", na="drop")
+    # generate the dataset
     ds = dataset_windowed(K=k, stride=stride)
-    # ds = ds.query('app == "facebook" | app == "twitter"')
-    ds = ds.dropna()
 
     # preprocessing
     ingress = (
@@ -58,6 +54,7 @@ if __name__ == "__main__":
     )
     ds["packets_length_mean_ingress"] = ingress.map(np.mean)
     ds["packets_length_std_ingress"] = ingress.map(np.std)
+
     egress = (
         ds["packets_length_total"]
         .map(np.array)
@@ -69,7 +66,7 @@ if __name__ == "__main__":
     ds["packets_length_std_egress"] = egress.map(np.std)
     ds = ds.drop(columns=["packets_length_total"]).dropna()
 
-    # splliting of the data
+    # splitting of the data
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
         ds["app"],
@@ -81,11 +78,11 @@ if __name__ == "__main__":
     print(f"X_test size: {X_test.shape}")
 
     if grid:
-        # ### PARAMETERS for Grid Search
+        # ##### PARAMETERS for Grid Search ###
         # Number of trees in random forest
         n_estimators = [int(x) for x in np.linspace(start=10, stop=1500, num=4)]
         # Number of features to consider at every split
-        max_features = ["sqrt"]
+        max_features = ["auto", "sqrt", "log2"]
         # Maximum number of levels in tree
         max_depth = [int(x) for x in np.linspace(10, 100, num=3)]
         max_depth.append(None)
@@ -108,24 +105,31 @@ if __name__ == "__main__":
             # "max_samples": max_samples,
         }
 
+        # grid search
         classifier = gridsearch_model(model_rf(), parameters)
+
     else:
-        # Dataset windowed 200/10
-        # 0.968
-        # {'bootstrap': True, 'max_depth': 50, 'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2,
-        # 'n_estimators': 500}
+        # use the best parameters
         classifier = model_rf(
             bootstrap=True,
             max_depth=50,
             max_features="sqrt",
             min_samples_leaf=1,
             min_samples_split=2,
-            n_estimators=500,
+            n_estimators=100,
         )
 
+    # training
+    print("Begin training...")
+    start = time.time()
     classifier.fit(X_train, y_train)
+    stop = time.time()
+    print(f"Done in {stop-start} seconds.")
 
+    # print the score
     print(f"Score: {classifier.score(X_test, y_test)}")
+
+    # if grid search, print also the best parameters
     if grid:
         print(classifier.best_params_)
 
