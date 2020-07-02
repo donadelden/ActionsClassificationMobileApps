@@ -3,8 +3,9 @@ from dataset import dataset_windowed
 from sklearn.model_selection import train_test_split
 from sklearn import ensemble
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import plot_confusion_matrix
-import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_fscore_support
+import pandas as pd
+import plots
 import numpy as np
 
 
@@ -25,6 +26,7 @@ def model_rf(
         min_samples_leaf=min_samples_leaf,
         min_samples_split=min_samples_split,
         max_samples=max_samples,
+        n_jobs=-1,
     )
     return model
 
@@ -70,7 +72,7 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
         ds["app"],
-        test_size=0.2,
+        test_size=0.3,
         # train_size=0.2,
         random_state=1234,
     )
@@ -133,9 +135,31 @@ if __name__ == "__main__":
     if grid:
         print(classifier.best_params_)
 
-    # plot confusion matrix
-    plt.figure()
-    plot_confusion_matrix(
-        classifier, X_test, y_test, labels=ds["app"].unique(), ax=plt.gca()
+    precision, recall, fscore, support = precision_recall_fscore_support(
+        y_test, classifier.predict(X_test)
     )
-    plt.show()
+
+    val = (
+        y_test.value_counts()
+        .rename("support")
+        .to_frame()
+        .reset_index()
+        .merge(
+            pd.DataFrame(
+                {
+                    "precision": precision,
+                    "recall": recall,
+                    "fscore": fscore,
+                    "support": support,
+                }
+            ),
+            on="support",
+        )
+        .set_index("index")
+    )
+
+    print(val)
+
+    # plot confusion matrix
+    plots.confusion_matrix_sk(classifier, X_test, y_test)
+    plots.show()
