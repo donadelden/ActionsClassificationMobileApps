@@ -9,18 +9,19 @@ from dataset import dataset_windowed
 
 
 def MyModel(input_shape, output_dim):
-
     X_input = tf.keras.Input(input_shape)
 
-    # CONV -> Batch Normalization -> eLU
+    # CONV -> MaxPool -> Batch Normalization
     X = tf.keras.layers.Conv1D(
         filters=64, kernel_size=3, activation=tf.nn.elu, name="conv0"
     )(X_input)
+    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool0")(X)
     X = tf.keras.layers.BatchNormalization(momentum=0.999, name="bn0")(X)
 
     X = tf.keras.layers.Conv1D(
         filters=64, kernel_size=3, activation=tf.nn.elu, name="conv1"
     )(X)
+    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool1")(X)
     X = tf.keras.layers.BatchNormalization(axis=2, name="bn1")(X)
 
     # FLATTEN X + FULLYCONNECTED
@@ -133,3 +134,7 @@ if __name__ == "__main__":
 
     plots.confusion_matrix_tf(y_test, y_pred)
     plots.show()
+
+    # print the architecture
+    # from tensorflow.keras.utils import plot_model
+    # plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True)
