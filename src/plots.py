@@ -30,11 +30,13 @@ def train_val_history(history):
 
 
 def confusion_matrix_tf(y_true, y_pred):
+    plt.figure(figsize=(5.3, 3.7))
     cm = tf.math.confusion_matrix(
         labels=y_true.cat.codes, predictions=y_pred.cat.codes
     ).numpy()
     disp = ConfusionMatrixDisplay(cm, display_labels=y_true.cat.categories)
-    disp.plot()
+    disp.plot(ax=plt.gca())
+    plt.gca().set_xticklabels([])
 
 
 def show():
