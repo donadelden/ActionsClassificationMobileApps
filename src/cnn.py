@@ -4,6 +4,7 @@ import tensorflow as tf
 from sklearn.model_selection import train_test_split
 import plots
 from dataset import dataset_windowed
+from sklearn.metrics import precision_recall_fscore_support
 
 
 def MyModel(input_shape, output_dim):
@@ -12,25 +13,38 @@ def MyModel(input_shape, output_dim):
 
     # CONV -> MaxPool -> Batch Normalization
     X = tf.keras.layers.Conv1D(
-        filters=64, kernel_size=3, activation=tf.nn.elu, name="conv0"
+        filters=10, kernel_size=5, activation=tf.nn.elu, name="conv0", padding="same"
     )(X_input)
-    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool0")(X)
+    X = tf.keras.layers.MaxPool1D(pool_size=5, name="maxpool0")(X)
     X = tf.keras.layers.BatchNormalization(momentum=0.999, name="bn0")(X)
 
     X = tf.keras.layers.Conv1D(
-        filters=64, kernel_size=3, activation=tf.nn.elu, name="conv1"
+        filters=20,
+        kernel_size=20,
+        activation=tf.nn.elu,
+        name="conv1",
+        padding="same",
+        strides=2,
     )(X)
-    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool1")(X)
+    X = tf.keras.layers.MaxPool1D(pool_size=8, name="maxpool1")(X)
     X = tf.keras.layers.BatchNormalization(axis=2, name="bn1")(X)
 
     # FLATTEN X + FULLYCONNECTED
     X = tf.keras.layers.Flatten()(X)
     X = tf.keras.layers.Dropout(0.1)(X)
     X = tf.keras.layers.Dense(
-        output_dim,
-        activation=tf.nn.sigmoid,
+        100,
+        activation=tf.nn.elu,
         kernel_regularizer=tf.keras.regularizers.l2(1e-3),
-        name="fc",
+        name="fc1",
+    )(X)
+    X = tf.keras.layers.BatchNormalization(momentum=0.999)(X)
+    X = tf.keras.layers.Dropout(0.2)(X)
+    X = tf.keras.layers.Dense(
+        output_dim,
+        activation=tf.nn.softmax,
+        kernel_regularizer=tf.keras.regularizers.l2(1e-3),
+        name="output",
     )(X)
 
     # Create the keras model
@@ -45,8 +59,8 @@ if __name__ == "__main__":
     # ######## decide if RETRAIN or not (at the first run the train is mandatory)
     retrain = True
     # ######## PARAMETERS for the dataset load process
-    k = 200
-    stride = 10
+    k = 175
+    stride = 20
     # ######## WHERE TO SAVE THE MODEL
     MODEL_DIRECTORY = "models/cnn"
 
@@ -56,7 +70,7 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
         ds["app"].astype("category"),
-        test_size=0.2,
+        test_size=0.3,
         random_state=1234,
     )
     print(f"X_train size: {X_train.shape}")
@@ -68,13 +82,13 @@ if __name__ == "__main__":
     if retrain or not os.path.isfile(MODEL_DIRECTORY + "/model.h5"):
 
         # generation of the model
-        model = MyModel((k, 1), len(ds["app"].unique()))
+        model = MyModel((k, 1), len(y_train.cat.categories))
 
         # #### LEARNING PARAMETERS #####
-        epochs = 5
-        batch_size = 32
-        initial_lr = 1e-3
-        lr_decay_rate = 0.97
+        epochs = 25
+        batch_size = 64
+        initial_lr = 2e-3
+        lr_decay_rate = 0.9
 
         # variable learning rate
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
@@ -92,7 +106,7 @@ if __name__ == "__main__":
 
         early_stopping = tf.keras.callbacks.EarlyStopping(
             monitor="val_accuracy",
-            min_delta=1e-4,
+            min_delta=1e-3,
             patience=5,
             restore_best_weights=True,
         )
@@ -135,6 +149,29 @@ if __name__ == "__main__":
         model.predict(X_test_reshaped, batch_size=100), columns=y_test_dumm.columns,
     )
     y_pred = y_pred_dumm.idxmax(axis="columns").astype("category")
+
+    precision, recall, fscore, support = precision_recall_fscore_support(y_test, y_pred)
+
+    val = (
+        y_test.value_counts()
+        .rename("support")
+        .to_frame()
+        .reset_index()
+        .merge(
+            pd.DataFrame(
+                {
+                    "precision": precision,
+                    "recall": recall,
+                    "fscore": fscore,
+                    "support": support,
+                }
+            ),
+            on="support",
+        )
+        .set_index("index")
+    )
+
+    print(val)
 
     plots.confusion_matrix_tf(y_test, y_pred)
     plots.show()
