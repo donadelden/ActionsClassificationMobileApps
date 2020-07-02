@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-import numpy as np
 import plots
 from dataset import dataset_windowed
 
@@ -11,15 +10,17 @@ def MyModel(input_shape, output_dim):
 
     X_input = tf.keras.Input(input_shape)
 
-    # CONV -> Batch Normalization -> eLU Block applied to X
+    # CONV -> MaxPool -> Batch Normalization
     X = tf.keras.layers.Conv1D(
         filters=64, kernel_size=3, activation=tf.nn.elu, name="conv0"
     )(X_input)
+    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool0")(X)
     X = tf.keras.layers.BatchNormalization(momentum=0.999, name="bn0")(X)
 
     X = tf.keras.layers.Conv1D(
         filters=64, kernel_size=3, activation=tf.nn.elu, name="conv1"
     )(X)
+    X = tf.keras.layers.MaxPool1D(pool_size=2, name="maxpool1")(X)
     X = tf.keras.layers.BatchNormalization(momentum=0.999, name="bn1")(X)
 
     # GRU
@@ -35,7 +36,7 @@ def MyModel(input_shape, output_dim):
         name="fc",
     )(X)
 
-    # Create the keras model.
+    # Create the keras model
     model = tf.keras.Model(inputs=X_input, outputs=X, name="RNNModel")
 
     return model
@@ -44,7 +45,7 @@ def MyModel(input_shape, output_dim):
 if __name__ == "__main__":
     tf.keras.backend.set_floatx("float64")
 
-    # ######## decide if RETRAIN or not (at the first run the train is mandatory)
+    # ######## decide if RETRAIN or not (at the first run the train is automatic)
     retrain = True
     # ######## PARAMETERS for the dataset load process
     k = 200
@@ -54,7 +55,6 @@ if __name__ == "__main__":
 
     # load and split the dataset
     ds = dataset_windowed(K=k, stride=stride)
-    # ds = ds.query("app != \"gmail\"")
 
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         model = MyModel((k, 1), len(ds["app"].unique()))
 
         # #### LEARNING PARAMETERS #####
-        epochs = 2
+        epochs = 1
         batch_size = 32
         initial_lr = 1e-3
         lr_decay_rate = 0.97
@@ -100,10 +100,11 @@ if __name__ == "__main__":
             restore_best_weights=True,
         )
 
-        # reshape of the training data
+        # reshape of training data
         X_train_reshaped = pd.DataFrame(X_train["packets_length_total"].to_list())
         X_train_reshaped = X_train_reshaped.to_numpy().reshape((-1, k, 1))
 
+        # training
         history = model.fit(
             x=X_train_reshaped,
             y=y_train_dumm,
@@ -112,12 +113,16 @@ if __name__ == "__main__":
             validation_split=0.25,
             callbacks=[early_stopping],
         )
+
         plots.train_val_history(history.history)
+        # save the model for future use
         model.save(MODEL_DIRECTORY + "/model.h5")
     else:
+        # load the model
         model = tf.keras.models.load_model(MODEL_DIRECTORY + "/model.h5")
         print("Model loaded successfully.")
 
+    # summary of the model
     model.summary()
 
     # reshape of the test data
@@ -128,10 +133,17 @@ if __name__ == "__main__":
     print(f"Test loss: {loss}")
     print(f"Test accuracy: {acc}")
 
+    # prediction for the generation of the confusion matrix
     y_pred_dumm = pd.DataFrame(
         model.predict(X_test_reshaped, batch_size=100), columns=y_test_dumm.columns,
     )
     y_pred = y_pred_dumm.idxmax(axis="columns").astype("category")
 
+    # confusion matrix
     plots.confusion_matrix_tf(y_test, y_pred)
     plots.show()
+
+    # print the architecture
+    from tensorflow.keras.utils import plot_model
+
+    plot_model(model, to_file="model.png", show_shapes=True, show_layer_names=True)
