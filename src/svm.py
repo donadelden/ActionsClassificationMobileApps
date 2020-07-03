@@ -69,10 +69,13 @@ def get_mean_variance(ds):
 
 if __name__ == "__main__":
 
-    # ds = dataset_mean_variance(agg_by="sequence", filter="both", na="drop")
+    # ds = dataset_mean_variance(agg_by="sequence", filter="both", na="drop") # old method
     ds = dataset_windowed(K=175, stride=25)
+    # query to remove Gmail from the dataset
+    # ds = ds.query('app != "gmail"')
+
+    # preprocessing
     ds = get_mean_variance(ds)
-    # ds = ds.query('app == "facebook" | app == "twitter"')
 
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
