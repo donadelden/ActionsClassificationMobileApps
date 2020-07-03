@@ -45,6 +45,8 @@ if __name__ == "__main__":
     stride = 10
     # generate the dataset
     ds = dataset_windowed(K=k, stride=stride)
+    # query to remove Gmail from the dataset
+    # ds = ds.query('app != "gmail"')
 
     # preprocessing
     ingress = (
