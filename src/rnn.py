@@ -69,6 +69,8 @@ if __name__ == "__main__":
 
     # load and split the dataset
     ds = dataset_windowed(K=k, stride=stride)
+    # query to remove Gmail from the dataset
+    # ds = ds.query('app != "gmail"')
 
     X_train, X_test, y_train, y_test = train_test_split(
         ds.drop("app", axis=1),
