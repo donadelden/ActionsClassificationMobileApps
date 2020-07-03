@@ -92,11 +92,12 @@ def dataset_mean_variance(
         ds = aggregate_flows_by_sequence(ds)
     elif agg_by == "action":
         ds = aggregate_flows_by_action(ds)
+        action = ds["action"]
+
     else:
         raise ValueError(f"Can only aggregate by action or sequence, not {agg_by}")
 
     app = ds["app"]
-    # action = ds["action"]
     # sequence = ds["sequence"]
 
     if filter == "both":
@@ -114,10 +115,16 @@ def dataset_mean_variance(
             .where(lambda s: s.map(lambda l: l.size) > 0)
             .dropna()
         )
-        mean_ingress = filtered_ingress.map(np.mean).rename("packets_length_mean")
-        variance_ingress = filtered_ingress.map(np.std).rename("packets_length_std")
-        mean_egress = filtered_egress.map(np.mean).rename("packets_length_mean")
-        variance_egress = filtered_egress.map(np.std).rename("packets_length_std")
+        mean_ingress = filtered_ingress.map(np.mean).rename(
+            "ingress_packets_length_mean"
+        )
+        variance_ingress = filtered_ingress.map(np.std).rename(
+            "ingress_packets_length_std"
+        )
+        mean_egress = filtered_egress.map(np.mean).rename("egress_packets_length_mean")
+        variance_egress = filtered_egress.map(np.std).rename(
+            "egress_packets_length_std"
+        )
 
         ds = pd.concat(
             [app, mean_ingress, variance_ingress, mean_egress, variance_egress], axis=1
@@ -156,6 +163,9 @@ def dataset_mean_variance(
         ds.dropna(inplace=True)
     elif na != None:
         raise ValueError(f"cannot use {na} method to treat NA/NaN")
+
+    if agg_by == "action":
+        ds = pd.concat([ds, action], axis=1)
 
     return ds
 
@@ -283,12 +293,12 @@ def dataset_windowed(
     ds
         the dataset
     """
-    if stride <= 0:
+    if stride == None:
+        stride = K
+    elif stride <= 0:
         raise ValueError(f"stride must be positive, got {stride}")
     elif stride < 1:
         stride = int(K * stride)
-    elif stride == None:
-        stride = K
 
     orig = read_dataset(data_dir=data_dir, data_file=data_file)
     aggregated = aggregate_flows_by_sequence(orig)

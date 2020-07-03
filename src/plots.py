@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import plot_confusion_matrix
 
 
 def train_val_history(history):
@@ -36,6 +37,12 @@ def confusion_matrix_tf(y_true, y_pred):
     ).numpy()
     disp = ConfusionMatrixDisplay(cm, display_labels=y_true.cat.categories)
     disp.plot(ax=plt.gca())
+    plt.gca().set_xticklabels([])
+
+
+def confusion_matrix_sk(model, X, y_true):
+    plt.figure(figsize=(5.3, 3.7))
+    plot_confusion_matrix(model, X, y_true, ax=plt.gca())
     plt.gca().set_xticklabels([])
 
 
