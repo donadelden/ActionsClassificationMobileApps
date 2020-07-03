@@ -131,3 +131,5 @@ dmypy.json
 
 # models
 models/*
+!models/rnn
+!models/cnn
