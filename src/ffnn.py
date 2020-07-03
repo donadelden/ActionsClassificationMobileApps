@@ -42,6 +42,8 @@ if __name__ == "__main__":
 
     # load the dataset
     ds = dataset_windowed(K=k, stride=stride)
+    # query to remove Gmail from the dataset
+    # ds = ds.query('app != "gmail"')
 
     # precomputations
     ingress = (
